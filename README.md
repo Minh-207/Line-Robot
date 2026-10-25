@@ -104,7 +104,7 @@ Thứ tự bit trên là chắc chắn từ phép dịch bit trong code. Còn A0
 
 Trong lúc học màu, di chuyển ngang robot qua line và nền để **từng mắt đều nhìn thấy cả hai vùng**, giữ độ cao cảm biến gần như lúc chạy. Nếu một mắt chỉ nhìn một màu, khoảng hiệu chuẩn của mắt đó có thể bằng 0 hoặc quá nhỏ.
 
-### 4.2. `updateLine()` học điều gì?
+### 4.2. `updateLine()` 
 
 Với từng mắt `j`, code lấy:
 
@@ -118,7 +118,7 @@ Tên `black_value` và `white_value` dễ gây hiểu nhầm: theo phép so sán
 
 Ví dụ một mắt có min=200, max=800 thì ngưỡng là 500. Trong code gốc, ADC >500 tạo bit 1; ADC <=500 tạo bit 0.
 
-### 4.3. Ba nút thực sự làm gì?
+### 4.3.Chức năng SW
 
 | Nút | Giá trị được gán trong bản gốc | Ý nghĩa |
 | --- | ---: | --- |
@@ -132,7 +132,7 @@ SW1 **không phải nút dừng khẩn cấp**. Với tốc độ nền 0, công
 
 Sau khi chạy, code không còn kiểm tra nút trong khối `while(start==0)`. Chưa có chức năng bấm lại để dừng hoặc học màu lại. Ba `if` độc lập cũng có nghĩa: bấm nhiều nút cùng lúc thì phép gán ở phía sau có thể ghi đè phép gán trước.
 
-### 4.4. Có lưu học màu vào EEPROM không?
+### 4.4.lưu học màu vào EEPROM 
 
 **Hiện tại không.** Đoạn `EEPROM.write(...)` ở dòng 235-243 nằm trong comment `/* ... */`. Chú thích “bấm SW1 để lưu” không phản ánh hành vi hiện tại.
 
