@@ -1,0 +1,367 @@
+#include <avr/interrupt.h>
+#include <EEPROM.h>
+#define RDIR 11     // chiều quay động cơ phải
+#define LDIR 9      // chiều quay động cơ trái
+#define LPWM 5      // tốc độ động cơ trái
+#define RPWM 6      // tốc độ động cơ phải
+#define BUTTON1 7   // nút nhấn 1
+#define BUTTON2 8   // nút nhấn 2
+#define BUTTON3 12  // nút nhấn 3
+#define BUZZER 4    // chân điều khiển loa
+#define RED 3       // Chân RED trên mạch
+#define GREEN 2     // Chân GREEN trên mạch
+#define BLUE 13     // Chân BLUE trên mạch
+#define SERVO 10    // Chân SERVO trên mạch
+//---------------------------------------------------
+int addr = 0;
+volatile int lastPos;
+volatile unsigned char isCalib = 0;
+volatile int servoPwm;
+volatile unsigned char sensor;  // Biến này trả về giá trị 1-0, sensor nào trên line thì bit tương ứng là 1, nền là 0
+unsigned int sensorValue[8];
+unsigned int sensorPID[8];
+unsigned int black_value[8];
+unsigned int white_value[8];
+unsigned int compare_value[8];
+int speed_run_forward;
+int cnt = 0;
+unsigned char pattern, start;
+int line = 0;
+float kp ;
+float kd ;
+void setup() {
+
+
+  //---------------PWM------------------------//
+  pinMode(LDIR, OUTPUT);
+  pinMode(RDIR, OUTPUT);
+  pinMode(BUTTON1, INPUT_PULLUP);
+  pinMode(BUTTON2, INPUT_PULLUP);
+  pinMode(BUTTON3, INPUT_PULLUP);
+  pinMode(RED, OUTPUT);
+  pinMode(GREEN, OUTPUT);
+  pinMode(BLUE, OUTPUT);
+  digitalWrite(RDIR, LOW);
+  digitalWrite(LDIR, LOW);
+  digitalWrite(RED, 1);
+  digitalWrite(GREEN, 1);
+  digitalWrite(BLUE, 1);
+  //-------------------------------------------------//
+  //CÀI ĐẶT CÁC THÔNG SỐ BAN ĐẦU
+  speed_run_forward = 200;  //bạn thay đổi tốc độ ở đây, tốc độ chạy max 255, min 10
+  speed_run(0, 0);         // dừng 2 bánh
+  start = 0;               // Trước khi chạy học màu lại, đưa cảm biến qua lại trên đường line rồi bấm SW1 để lưu
+  readEeprom();
+  Serial.begin(9600);
+  //-------------------------------------------------//
+  for (int i = 2000; i < 3500; i += 500) {  // Phát âm thành khởi động
+    tone(BUZZER, i, 100);
+    delay(100);
+  }
+  timer_init();
+  isCalib = 1;
+  pinMode(BUZZER, OUTPUT);
+  //-------------------------------------------------//
+}
+void timer_init() {  // cài đặt timer dùng cho lấy mẫu PID
+  // Timer/Counter 2 initialization
+  ASSR = (0 << EXCLK) | (0 << AS2);
+  TCCR2A = (0 << COM2A1) | (0 << COM2A0) | (0 << COM2B1) | (0 << COM2B0) | (0 << WGM21) | (0 << WGM20);
+  TCCR2B = (0 << WGM22) | (1 << CS22) | (1 << CS21) | (1 << CS20);
+  TCNT2 = 0xB2;
+  OCR2A = 0x00;
+  OCR2B = 0x00;
+  // Timer/Counter 2 Interrupt(s) initialization
+  TIMSK2 = (0 << OCIE2B) | (0 << OCIE2A) | (1 << TOIE2);
+}
+ISR(TIMER2_OVF_vect) {  // Ngắt timer 2
+  TCNT2 = 0xB2;
+  read_sensor();
+  cnt++;
+}
+void loop()  // vòng lặp, không dùng delay() trong này
+{
+  while (start == 0)  // nhấn nút để chạy
+  {
+    updateLine();// Học màu rà qua rà lại, không được nhấc xe lên
+    if (digitalRead(BUTTON1) == 0) {  // Nhấn SW1 để chạy với tốc độ 0 để test độ bám PID
+      start = 1;
+      pattern = 10;
+      isCalib = 0;
+      cnt = 0;
+      speed_run_forward = 0;
+    }
+    if (digitalRead(BUTTON2) == 0) {  // Nhấn SW2 để chạy với tốc độ 50
+      start = 1;
+      pattern = 10;
+      isCalib = 0;
+      cnt = 0;
+      speed_run_forward = 200;  // Muốn chạy nhanh hơn thì tăng giá trị này lên
+    }
+    if (digitalRead(BUTTON3) == 0) {  // Nhấn SW3 để chạy với tốc độ 70
+      start = 1;
+      pattern = 10;
+      isCalib = 0;
+      cnt = 0;
+      speed_run_forward = 255;  // Muốn chạy nhanh hơn thì tăng giá trị này lên
+    }
+  }
+
+  switch (pattern) {  // đoạn mã trạng thái máy
+    case 10:
+      if (cnt < speed_run_forward) {  // KHởi động mềm chống bốc đầu
+        runforwardline(cnt);
+      } else {
+        runforwardline(speed_run_forward);
+        pattern = 11;
+        break;
+      }
+      break;
+    case 11:  // Dùng biến sensor giải maps tại đây
+              // YOUR CODE HERE //
+      runforwardline(speed_run_forward);// Hàm này là chạy PID theo line
+      break;
+    case 12: // Tạo các case này để phục vụ cho việc giải maps
+      break;
+    case 100:
+      speed_run(0, 0); // Khi muốn điều khiển trực tiếp động cơ thì dùng hàm này.
+      RGB(millis() / 100 % 3);
+      break;
+    default:
+      pattern = 11;
+      break;
+  }
+}
+///////////////////////////////////////////////////////////////////////
+void runforwardline(int tocdo)  // hàm chạy bám line
+{
+  switch (sensor) {
+    case 0b00000000:// mất line
+      if (line > 0) {
+        speed_run(tocdo, -10);
+        RGB(1);
+      } else if (line < 0) {
+        speed_run(-10, tocdo);
+        RGB(2);
+      } else {
+        speed_run(255,255);
+        RGB(0);
+      }
+      break;
+    case 0b11111111:
+      speed_run(255,255);
+    case 0b00011000:
+    case 0b00001000:
+    case 0b00010000:
+    case 0b00111000:
+    case 0b00011100:
+      RGB(0);
+      line = 0;
+      handleAndSpeed(servoPwm, tocdo );//bám line PID
+      break;
+    case 0b00111100:
+    case 0b00111110:
+    case 0b01111110:
+      RGB(4);
+      line = 0;
+      handleAndSpeed(servoPwm, tocdo);//bám line PID
+      break;
+
+      ///////////////////////////////////////////////////////////////////////
+    case 0b00001100:
+    case 0b00000100:
+    case 0b00001110:
+    case 0b00011110:
+      line = 1;
+      handleAndSpeed(servoPwm, tocdo);
+      break;
+    case 0b00000110:
+    case 0b00000010:
+    case 0b00000111:
+      line = 2;
+      handleAndSpeed(servoPwm, tocdo);
+      break;
+    case 0b00000011:
+    case 0b00000001:
+    case 0b00001111:
+    case 0b00011111:
+    case 0b00111111:
+      line = 3;
+      handleAndSpeed(servoPwm, tocdo);
+      break;
+      /////////////////////////////////////////////////////////////////////
+
+    case 0b00110000:
+    case 0b00100000:
+    case 0b01110000:
+    case 0b01111000:
+      line = -1;
+      handleAndSpeed(servoPwm, tocdo);
+      break;
+    case 0b01100000:
+    case 0b01000000:
+    case 0b11100000:
+      line = -2;
+      handleAndSpeed(servoPwm, tocdo);
+      break;
+    case 0b11000000:
+    case 0b10000000:
+    case 0b11110000:
+    case 0b11111000:
+    case 0b11111100:
+      line = -3;
+      handleAndSpeed(servoPwm, tocdo);
+      break;
+
+      /////////////////////////////////////////////////////////////////
+    default:
+      handleAndSpeed(0, 0);
+      break;
+  }
+}
+//--------------------------------------------------------------------------//
+void updateLine() {
+  // Serial.println(sensor, BIN);
+  if (sensor == 0xff) beep(100);
+  for (int i = 0; i < 8; i++) {
+    Serial.print(sensorValue[i]);
+    Serial.print("  ");
+    if (black_value[i] == 0) black_value[i] = 1100;
+    if (sensorValue[i] < black_value[i]) black_value[i] = sensorValue[i];
+    if (sensorValue[i] > white_value[i]) white_value[i] = sensorValue[i];
+    compare_value[i] = (black_value[i] + white_value[i]) / 2;
+  }
+  Serial.println();
+  /*  if (digitalRead(BUTTON1) == 0) {
+    for (int i = 0; i < 8; i++) {
+      // compare_value[i] = (black_value[i] + white_value[i]) / 2;
+      EEPROM.write(addr + i, compare_value[i] / 4);
+    }
+    digitalWrite(BUZZER, 1);
+    delay(100);
+    digitalWrite(BUZZER, 0);
+  }*/
+  RGB(millis() / 100 % 3);
+}
+void RGB(int color) {
+  switch (color) {
+    case 0:
+      digitalWrite(RED, 0);
+      digitalWrite(GREEN, 1);
+      digitalWrite(BLUE, 1);
+      break;
+    case 1:
+      digitalWrite(RED, 1);
+      digitalWrite(GREEN, 0);
+      digitalWrite(BLUE, 1);
+      break;
+    case 2:
+      digitalWrite(RED, 1);
+      digitalWrite(GREEN, 1);
+      digitalWrite(BLUE, 0);
+      break;
+    default:
+      digitalWrite(RED, 1);
+      digitalWrite(GREEN, 1);
+      digitalWrite(BLUE, 1);
+      break;
+  }
+}
+void readEeprom() {
+  for (int i = 0; i < 8; i++) {
+    compare_value[i] = EEPROM.read(i) * 4;
+  }
+}
+//-------------------------------------------------------------------//
+
+//---------------------------------------------------------------------------//
+void handleAndSpeed(int angle, int speed1) {
+  int speedLeft;
+  int speedRight;
+  if ((speed1 + angle) > 255) {
+    speed1 = 255 - angle;
+  }
+  if ((speed1 - angle) > 255) {
+    speed1 = 255 + angle;
+  }
+  speedLeft = speed1 + angle;
+  speedRight = speed1 - angle;
+  speed_run(speedLeft, speedRight);
+}
+//---------------------------------------------------------------------------//
+void speed_run(int speedDC_left, int speedDC_right)  // hàm truyền vào tốc độ động cơ trái + phải
+{
+
+  if (speedDC_left < 0) {
+    analogWrite(LPWM, 255 + speedDC_left);
+    digitalWrite(LDIR, HIGH);
+  } else if (speedDC_left >= 0) {
+    speedDC_left = speedDC_left;
+    analogWrite(LPWM, speedDC_left);
+    digitalWrite(LDIR, LOW);
+  }
+  if (speedDC_right < 0) {
+    analogWrite(RPWM, 255 + speedDC_right);
+    digitalWrite(RDIR, HIGH);
+  } else if (speedDC_right >= 0) {
+    speedDC_right = speedDC_right;
+    analogWrite(RPWM, speedDC_right);
+    digitalWrite(RDIR, LOW);
+  }
+}
+//-----------------------------------------------------------//
+void read_sensor()  // hàm đọc cảm biến
+{
+  unsigned char temp = 0;
+  unsigned int sum = 0;
+  unsigned long avg = 0;
+  int i, iP, iD;
+  int iRet;
+  sensorValue[0] =  analogRead(A0);  // Nếu muốn chạy line trắng nền đen thì: sensorValue[0] = analogRead(A0);
+  sensorValue[1] =  analogRead(A1);  // Tương tự bên trên
+  sensorValue[2] =  analogRead(A2);
+  sensorValue[3] =  analogRead(A3);
+  sensorValue[4] =  analogRead(A4);
+  sensorValue[5] =  analogRead(A5);
+  sensorValue[6] =  analogRead(A6);
+  sensorValue[7] =  analogRead(A7);
+  for (int j = 0; j < 8; j++) {  // Cân bằng cảm biến cho PID
+    if (isCalib == 0) {
+      if (sensorValue[j] < black_value[j])
+        sensorValue[j] = black_value[j];
+      if (sensorValue[j] > white_value[j])
+        sensorValue[j] = white_value[j];
+      sensorPID[j] = map(sensorValue[j], black_value[j], white_value[j], 0, 1000);
+    }
+    temp = temp << 1;
+    if (sensorValue[j] > compare_value[j]) {
+      temp |= 0x01;
+    } else {
+      temp &= 0xfe;
+    }
+    sensor = temp;  // Biến này dùng để giải maps
+  }
+  // Tính toán PID
+  for (int j = 0; j < 8; j++) {
+    avg += (long)(sensorPID[j]) * ((j)*1000);
+    sum += sensorPID[j];
+  }
+  i = (int)((avg / sum) - 3500);
+  kp = 2.5;
+  kd = 0.1;
+  iP = kp * i;
+  iD = kd * (lastPos - i);
+  iRet = (iP - iD);
+  if ((iRet < -4000)) {
+    iRet = 0;
+  }
+  servoPwm = iRet / 60;
+}
+void beep(int timer) {
+  digitalWrite(BUZZER, 1);
+  delay(timer);
+  digitalWrite(BUZZER, 0);
+}
+unsigned char sensorMask(unsigned char mask) {// Hàm mặt nạ xử lý cảm biến
+  return (sensor & mask);
+}
