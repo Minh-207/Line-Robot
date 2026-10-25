@@ -7,7 +7,7 @@ Robot dùng 8 cảm biến quang học để tìm vị trí line, sau đó đi�
 
 ## Mục lục
 
-1. [Cách robot suy nghĩ](#1-cách-robot-suy-nghĩ)
+1. [Cách robot hoạt động](#1-cách-robot-hoạt-dộng)
 2. [Phần cứng và chân kết nối](#2-phần-cứng-và-chân-kết-nối)
 3. [Bản đồ các khối code](#3-bản-đồ-các-khối-code)
 4. [Khởi động và học màu](#4-khởi-động-và-học-màu)
