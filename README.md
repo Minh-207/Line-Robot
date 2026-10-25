@@ -22,7 +22,7 @@ Robot dùng 8 cảm biến quang học để tìm vị trí line, sau đó đi�
 13. [Muốn phát triển tiếp thì sửa ở đâu?](#13-muốn-phát-triển-tiếp-thì-sửa-ở-đâu)
 14. [Phạm vi kiểm tra và tài liệu tham khảo](#14-phạm-vi-kiểm-tra-và-tài-liệu-tham-khảo)
 
-## 1. Cách robot suy nghĩ
+## 1. Cách robot hoạt động
 
 Mỗi chu kỳ, robot thực hiện những công việc sau:
 
