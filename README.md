@@ -90,11 +90,11 @@ Thứ tự bit trên là chắc chắn từ phép dịch bit trong code. Còn A0
 | `updateLine()` | 223-245 | Thu min/max ADC và tính ngưỡng từng mắt | `black_value`, `white_value`, `compare_value` |
 | `RGB()` | 246-269 | Bật/tắt các chân LED | 0: đỏ; 1: xanh lá; 2: xanh dương |
 | `readEeprom()` | 270-274 | Đọc 8 ngưỡng đã lưu trước đó | `EEPROM.read(i)*4` |
-| `handleAndSpeed()` | 278-290 | Trộn tốc độ nền với mức đánh lái | `speedLeft`, `speedRight` |
-| `speed_run()` | 292-311 | Đổi lệnh hai bánh thành tín hiệu GPIO/PWM | D5/D9 và D6/D11 |
+| `handleAndSpeed()` | 278-290 | tốc độ và mức đánh lái | `speedLeft`, `speedRight` |
+| `speed_run()` | 292-311 | phát xung tín hiệu GPIO/PWM | D5/D9 và D6/D11 |
 | `read_sensor()` | 313-359 | Đọc ADC, cân bằng, đóng gói bit, tính vị trí và PD | `sensorPID[]`, `sensor`, `servoPwm` |
-| `beep()` | 360-364 | Kéo chân còi lên, chờ rồi kéo xuống | Có `delay(timer)` |
-| `sensorMask()` | 365-367 | Lấy một nhóm bit cảm biến | `sensor & mask`; chưa có chỗ gọi |
+| `beep()` | 360-364 | Còi báo | Có `delay(timer)` |
+| `sensorMask()` | 365-367 | bit cảm biến | `sensor & mask`; chưa có chỗ gọi |
 
 ## 4. Khởi động và học màu
 
